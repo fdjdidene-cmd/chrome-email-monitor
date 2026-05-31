@@ -1,6 +1,7 @@
 // Stockage des emails déjà traités
 let processedEmails = new Set();
 let currentEmailId = null;
+let isDetailViewOpen = false;
 
 // Charger les emails traités depuis le stockage
 chrome.storage.local.get('processedEmails', (result) => {
@@ -13,6 +14,8 @@ chrome.storage.local.get('processedEmails', (result) => {
 // Configuration des délais d'attente pour différents services
 const CONFIG = {
   GMAIL: {
+    // Détecte si on est dans la vue détail (pas dans la liste)
+    detailViewSelector: '[role="main"] [data-message-id]',
     subjectSelector: '[role="main"] h2, [role="main"] .hP',
     senderSelector: '[role="main"] .gD.gE span, [role="main"] .go span',
     contentSelector: '[role="main"] .aHl .a3s, [role="main"] .h5',
@@ -21,6 +24,8 @@ const CONFIG = {
     retryDelay: 500
   },
   OUTLOOK: {
+    // Détecte si on est dans la vue détail
+    detailViewSelector: '[role="main"] [role="article"]',
     subjectSelector: '[role="main"] [data-automationid="subject"]',
     senderSelector: '[role="main"] [data-automationid="from"] span',
     contentSelector: '[role="main"] [data-automationid="body"], [role="main"] .messageBody',
@@ -40,6 +45,22 @@ function detectEmailService() {
     return 'OUTLOOK';
   }
   return null;
+}
+
+/**
+ * Vérifie si on est dans la vue détail d'un email
+ */
+function isEmailDetailViewOpen(service) {
+  const config = CONFIG[service];
+  const detailElement = document.querySelector(config.detailViewSelector);
+  
+  if (!detailElement) {
+    console.log('📋 Vue liste des emails - pas de traitement');
+    return false;
+  }
+  
+  console.log('📧 Vue détail d\'un email détectée');
+  return true;
 }
 
 /**
@@ -160,10 +181,15 @@ async function waitForEmailToLoad(service, retries = 0) {
 }
 
 /**
- * Traite un email détecté
+ * Traite un email détecté (UNIQUEMENT en vue détail)
  */
 async function processEmail(service) {
   try {
+    // ✅ VÉRIFICATION CLÉE: On n'extrait QUE si on est en vue détail
+    if (!isEmailDetailViewOpen(service)) {
+      return;
+    }
+
     console.log('🔍 Nouveau mail détecté (' + service + ')...');
     
     // Attendre le chargement complet
@@ -221,6 +247,7 @@ async function processEmail(service) {
 
 /**
  * Monitore les changements avec intervalle (évite les warnings)
+ * UNIQUEMENT active en vue détail
  */
 function initializeEmailMonitor() {
   const emailService = detectEmailService();
@@ -234,6 +261,8 @@ function initializeEmailMonitor() {
 
   // Utiliser un intervalle au lieu de MutationObserver pour éviter le warning
   let lastCheckedTime = 0;
+  let lastDetailViewState = false;
+
   const checkInterval = setInterval(() => {
     const now = Date.now();
     
@@ -247,10 +276,30 @@ function initializeEmailMonitor() {
       return;
     }
 
-    processEmail(emailService);
+    // Vérifier l'état de la vue détail
+    const isDetailNow = isEmailDetailViewOpen(emailService);
+    
+    // Si on vient de passer en vue détail, traiter l'email
+    if (isDetailNow && !lastDetailViewState) {
+      console.log('👁️  Entrée en vue détail - activation du traitement');
+      processEmail(emailService);
+    }
+    
+    // Si on est en vue détail, vérifier les changements d'email
+    if (isDetailNow) {
+      processEmail(emailService);
+    }
+    
+    // Si on sort de la vue détail, réinitialiser
+    if (!isDetailNow && lastDetailViewState) {
+      console.log('👈 Retour à la liste - pause du traitement');
+      currentEmailId = null;
+    }
+    
+    lastDetailViewState = isDetailNow;
   }, 300);
 
-  console.log('👁️  Surveillance activée - ouverture d\'email détectée automatiquement');
+  console.log('👁️  Surveillance activée - UNIQUEMENT sur vue détail');
 }
 
 // Initialiser quand le DOM est prêt
