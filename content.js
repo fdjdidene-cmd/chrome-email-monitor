@@ -89,6 +89,116 @@ function generateEmailHash(subject, sender) {
 }
 
 /**
+ * Affiche les informations dans une boîte en bas de la page
+ */
+function displayEmailInfoInPage(emailData) {
+  // Supprimer la boîte précédente s'il y en a une
+  const oldBox = document.getElementById('email-monitor-box');
+  if (oldBox) {
+    oldBox.remove();
+  }
+
+  // Créer la boîte d'affichage
+  const box = document.createElement('div');
+  box.id = 'email-monitor-box';
+  box.style.cssText = `
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 400px;
+    max-height: 50vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  `;
+
+  // Contenu de la boîte
+  const attachmentsHTML = emailData.attachments && emailData.attachments.length > 0
+    ? emailData.attachments.map(att => `
+        <div style="background: rgba(255,255,255,0.1); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px;">
+          📎 ${escapeHtml(att.name)} <span style="opacity: 0.7;">(${escapeHtml(att.size)})</span>
+        </div>
+      `).join('')
+    : '<div style="opacity: 0.8; font-size: 12px;">Aucune pièce jointe</div>';
+
+  box.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3 style="margin: 0; font-size: 18px;">✅ EMAIL EXTRAIT</h3>
+      <button id="close-email-box" style="
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        width: 30px;
+        height: 30px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">✕</button>
+    </div>
+
+    <div style="border-left: 3px solid rgba(255,255,255,0.3); padding-left: 12px; margin-bottom: 12px;">
+      <div style="margin-bottom: 10px;">
+        <span style="opacity: 0.8; font-size: 12px;">SUJET</span>
+        <div style="font-weight: 600; margin-top: 3px; word-break: break-word;">${escapeHtml(emailData.subject)}</div>
+      </div>
+      
+      <div style="margin-bottom: 10px;">
+        <span style="opacity: 0.8; font-size: 12px;">EXPÉDITEUR</span>
+        <div style="font-weight: 600; margin-top: 3px; word-break: break-word;">${escapeHtml(emailData.sender)}</div>
+      </div>
+
+      <div style="margin-bottom: 10px;">
+        <span style="opacity: 0.8; font-size: 12px;">SERVICE</span>
+        <div style="font-weight: 600; margin-top: 3px;">${escapeHtml(emailData.service)}</div>
+      </div>
+
+      <div style="margin-bottom: 10px;">
+        <span style="opacity: 0.8; font-size: 12px;">HORODATAGE</span>
+        <div style="font-weight: 600; margin-top: 3px; font-size: 12px;">${new Date(emailData.timestamp).toLocaleString('fr-FR')}</div>
+      </div>
+    </div>
+
+    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+      <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">CONTENU</span>
+      <div style="font-size: 13px; max-height: 120px; overflow-y: auto; word-break: break-word; line-height: 1.4;">
+        ${escapeHtml(emailData.content.substring(0, 500))}${emailData.content.length > 500 ? '...' : ''}
+      </div>
+    </div>
+
+    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px;">
+      <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">PIÈCES JOINTES (${emailData.attachmentCount})</span>
+      ${attachmentsHTML}
+    </div>
+  `;
+
+  // Ajouter la boîte au DOM
+  document.body.appendChild(box);
+
+  // Bouton de fermeture
+  document.getElementById('close-email-box').addEventListener('click', () => {
+    box.remove();
+  });
+}
+
+/**
+ * Échappe le texte HTML pour éviter les injections
+ */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
  * Extrait les informations d'un email Gmail DEPUIS LE CONTENEUR
  */
 function extractGmailEmail() {
@@ -264,11 +374,14 @@ async function processEmail(service) {
       processedEmails: Array.from(processedEmails)
     });
 
-    // Afficher le résultat
+    // Afficher le résultat EN CONSOLE
     console.log('✅ EMAIL EXTRAIT AVEC SUCCÈS');
     console.log('═'.repeat(60));
     console.log(JSON.stringify(emailData, null, 2));
     console.log('═'.repeat(60));
+
+    // Afficher le résultat DANS LA PAGE
+    displayEmailInfoInPage(emailData);
 
     // Envoyer au background script
     chrome.runtime.sendMessage({
