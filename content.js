@@ -144,6 +144,24 @@ function generateEmailHash(subject, sender) {
 }
 
 /**
+ * Crée un timestamp au moment de l'appel
+ */
+function getTimestamp() {
+  return new Date().toISOString();
+}
+
+/**
+ * Formate le timestamp pour l'affichage
+ */
+function formatTimestamp(isoString) {
+  try {
+    return new Date(isoString).toLocaleString('fr-FR');
+  } catch (e) {
+    return 'Date invalide';
+  }
+}
+
+/**
  * Affiche les informations dans une boîte en bas de la page
  */
 function displayEmailInfoInPage(emailData) {
@@ -218,7 +236,7 @@ function displayEmailInfoInPage(emailData) {
 
       <div style="margin-bottom: 10px;">
         <span style="opacity: 0.8; font-size: 12px;">HORODATAGE</span>
-        <div style="font-weight: 600; margin-top: 3px; font-size: 12px;">${new Date(emailData.timestamp).toLocaleString('fr-FR')}</div>
+        <div style="font-weight: 600; margin-top: 3px; font-size: 12px;">${formatTimestamp(emailData.timestamp)}</div>
       </div>
     </div>
 
@@ -303,6 +321,10 @@ function extractGmailEmail() {
 
     console.log('📎 Nombre de pièces jointes:', attachments.length);
 
+    // Créer le timestamp AU MOMENT DE L'EXTRACTION
+    const timestamp = getTimestamp();
+    console.log('⏰ Timestamp créé:', timestamp);
+
     return {
       service: 'Gmail',
       subject,
@@ -310,7 +332,7 @@ function extractGmailEmail() {
       content,
       attachments,
       attachmentCount: attachments.length,
-      timestamp: new Date().toISOString()
+      timestamp: timestamp
     };
   } catch (error) {
     console.error('❌ Erreur extraction Gmail:', error);
@@ -359,6 +381,9 @@ function extractOutlookEmail() {
       size: el.closest('div')?.querySelector('.attachmentSize')?.innerText?.trim() || 'Taille inconnue'
     }));
 
+    // Créer le timestamp AU MOMENT DE L'EXTRACTION
+    const timestamp = getTimestamp();
+
     return {
       service: 'Outlook',
       subject,
@@ -366,7 +391,7 @@ function extractOutlookEmail() {
       content,
       attachments,
       attachmentCount: attachments.length,
-      timestamp: new Date().toISOString()
+      timestamp: timestamp
     };
   } catch (error) {
     console.error('❌ Erreur extraction Outlook:', error);
