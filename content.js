@@ -14,27 +14,64 @@ chrome.storage.local.get('processedEmails', (result) => {
 // Configuration des délais d'attente pour différents services
 const CONFIG = {
   GMAIL: {
-    // Conteneur principal de l'email (tu l'as fourni)
+    // Conteneur principal de l'email
     emailContainerSelector: 'div.nH > div.l2',
     // Détecte si on est dans la vue détail
     detailViewSelector: '[role="main"] [data-message-id]',
-    // Sélecteurs DANS le conteneur
-    subjectSelector: 'h2, .hP',
-    senderSelector: '.gD.gE span, .go span',
-    contentSelector: '.aHl .a3s, .h5',
-    attachmentSelector: '.aZo',
-    maxRetries: 10,
-    retryDelay: 500
+    // Sélecteurs DANS le conteneur - multiples options
+    subjectSelectors: [
+      'h2',                    // Standard Gmail
+      '.hP',                   // Alternative
+      '[data-subject]',        // Avec attribut
+      'span[data-is-subject="true"]',  // Attribut spécifique
+      '.aHl h2'               // Dans le conteneur aHl
+    ],
+    senderSelectors: [
+      '.gD.gE span',           // Standard
+      '.go span',              // Alternative
+      '[data-email]',          // Avec email
+      '.yP',                   // Alternative
+      '.gD span'               // Simpler
+    ],
+    contentSelectors: [
+      '.aHl .a3s',             // Standard Gmail
+      '.h5',                   // Alternative
+      '[role="article"]',      // Article
+      '.msg',                  // Message
+      '.aHl'                   // Conteneur du message
+    ],
+    attachmentSelectors: [
+      '.aZo',                  // Standard
+      '[data-attachment-id]',  // Avec ID
+      '.aVn'                   // Alternative
+    ],
+    maxRetries: 15,
+    retryDelay: 300
   },
   OUTLOOK: {
     emailContainerSelector: '[role="main"] [role="article"]',
     detailViewSelector: '[role="main"] [role="article"]',
-    subjectSelector: '[data-automationid="subject"]',
-    senderSelector: '[data-automationid="from"] span',
-    contentSelector: '[data-automationid="body"], .messageBody',
-    attachmentSelector: '[data-automationid="attachmentList"] [role="link"]',
-    maxRetries: 10,
-    retryDelay: 500
+    subjectSelectors: [
+      '[data-automationid="subject"]',
+      'h1',
+      '[role="heading"]'
+    ],
+    senderSelectors: [
+      '[data-automationid="from"] span',
+      '.peoplePickerPersona',
+      '[data-automationid="from"]'
+    ],
+    contentSelectors: [
+      '[data-automationid="body"]',
+      '.messageBody',
+      '[role="article"] div'
+    ],
+    attachmentSelectors: [
+      '[data-automationid="attachmentList"] [role="link"]',
+      '.attachmentThumbnail'
+    ],
+    maxRetries: 15,
+    retryDelay: 300
   }
 };
 
@@ -46,6 +83,24 @@ function detectEmailService() {
     return 'GMAIL';
   } else if (window.location.hostname.includes('outlook')) {
     return 'OUTLOOK';
+  }
+  return null;
+}
+
+/**
+ * Essaie plusieurs sélecteurs pour trouver un élément
+ */
+function findElementWithMultipleSelectors(container, selectors) {
+  for (const selector of selectors) {
+    try {
+      const element = container.querySelector(selector);
+      if (element && element.innerText?.trim()) {
+        console.log('✅ Trouvé avec sélecteur:', selector);
+        return element;
+      }
+    } catch (e) {
+      // Continuer avec le prochain sélecteur
+    }
   }
   return null;
 }
@@ -209,26 +264,44 @@ function extractGmailEmail() {
     const container = getEmailContainer('GMAIL');
     if (!container) return null;
 
-    console.log('🔎 Extraction depuis le conteneur Gmail:', container);
+    console.log('🔎 Extraction depuis le conteneur Gmail');
+    console.log('📦 Conteneur:', container);
     
-    // Sujet - rechercher DANS le conteneur
-    const subjectElement = container.querySelector(config.subjectSelector);
+    // Sujet - essayer plusieurs sélecteurs
+    const subjectElement = findElementWithMultipleSelectors(container, config.subjectSelectors);
     const subject = subjectElement?.innerText?.trim() || 'Sujet inconnu';
+    console.log('📌 Sujet trouvé:', subject);
 
-    // Expéditeur - rechercher DANS le conteneur
-    const senderElement = container.querySelector(config.senderSelector);
+    // Expéditeur - essayer plusieurs sélecteurs
+    const senderElement = findElementWithMultipleSelectors(container, config.senderSelectors);
     const sender = senderElement?.innerText?.trim() || 'Expéditeur inconnu';
+    console.log('👤 Expéditeur trouvé:', sender);
 
-    // Contenu du mail - rechercher DANS le conteneur
-    const contentElement = container.querySelector(config.contentSelector);
+    // Contenu du mail - essayer plusieurs sélecteurs
+    const contentElement = findElementWithMultipleSelectors(container, config.contentSelectors);
     const content = contentElement?.innerText?.trim() || 'Contenu non disponible';
+    console.log('📝 Contenu trouvé (longueur):', content.length);
 
-    // Pièces jointes - rechercher DANS le conteneur
-    const attachmentElements = container.querySelectorAll(config.attachmentSelector);
-    const attachments = Array.from(attachmentElements).map(el => ({
+    // Pièces jointes - essayer plusieurs sélecteurs
+    let attachmentElements = [];
+    for (const selector of config.attachmentSelectors) {
+      try {
+        attachmentElements = Array.from(container.querySelectorAll(selector));
+        if (attachmentElements.length > 0) {
+          console.log('✅ Pièces jointes trouvées avec:', selector);
+          break;
+        }
+      } catch (e) {
+        // Continuer
+      }
+    }
+
+    const attachments = attachmentElements.map(el => ({
       name: el.getAttribute('download') || el.innerText.trim(),
       size: el.closest('.aZo')?.querySelector('.tS')?.innerText?.trim() || 'Taille inconnue'
     }));
+
+    console.log('📎 Nombre de pièces jointes:', attachments.length);
 
     return {
       service: 'Gmail',
@@ -256,23 +329,32 @@ function extractOutlookEmail() {
     const container = getEmailContainer('OUTLOOK');
     if (!container) return null;
 
-    console.log('🔎 Extraction depuis le conteneur Outlook:', container);
+    console.log('🔎 Extraction depuis le conteneur Outlook');
     
-    // Sujet - rechercher DANS le conteneur
-    const subjectElement = container.querySelector(config.subjectSelector);
+    // Sujet
+    const subjectElement = findElementWithMultipleSelectors(container, config.subjectSelectors);
     const subject = subjectElement?.innerText?.trim() || 'Sujet inconnu';
 
-    // Expéditeur - rechercher DANS le conteneur
-    const senderElement = container.querySelector(config.senderSelector);
+    // Expéditeur
+    const senderElement = findElementWithMultipleSelectors(container, config.senderSelectors);
     const sender = senderElement?.innerText?.trim() || 'Expéditeur inconnu';
 
-    // Contenu du mail - rechercher DANS le conteneur
-    const contentElement = container.querySelector(config.contentSelector);
+    // Contenu du mail
+    const contentElement = findElementWithMultipleSelectors(container, config.contentSelectors);
     const content = contentElement?.innerText?.trim() || 'Contenu non disponible';
 
-    // Pièces jointes - rechercher DANS le conteneur
-    const attachmentElements = container.querySelectorAll(config.attachmentSelector);
-    const attachments = Array.from(attachmentElements).map(el => ({
+    // Pièces jointes
+    let attachmentElements = [];
+    for (const selector of config.attachmentSelectors) {
+      try {
+        attachmentElements = Array.from(container.querySelectorAll(selector));
+        if (attachmentElements.length > 0) break;
+      } catch (e) {
+        // Continuer
+      }
+    }
+
+    const attachments = attachmentElements.map(el => ({
       name: el.innerText?.trim() || el.getAttribute('aria-label') || 'Fichier inconnu',
       size: el.closest('div')?.querySelector('.attachmentSize')?.innerText?.trim() || 'Taille inconnue'
     }));
@@ -315,15 +397,22 @@ async function waitForEmailToLoad(service, retries = 0) {
   }
 
   // Vérifier que le sujet est présent dans le conteneur
-  const subjectElement = container.querySelector(CONFIG[service].subjectSelector);
-  if (!subjectElement && retries < config.maxRetries) {
+  let subjectFound = false;
+  for (const selector of CONFIG[service].subjectSelectors) {
+    if (container.querySelector(selector)?.innerText?.trim()) {
+      subjectFound = true;
+      break;
+    }
+  }
+
+  if (!subjectFound && retries < config.maxRetries) {
     console.log(`⏳ Sujet pas encore disponible (${service})... tentative ${retries + 1}/${config.maxRetries}`);
     await new Promise(resolve => setTimeout(resolve, config.retryDelay));
     return waitForEmailToLoad(service, retries + 1);
   }
 
   // Attendre que le contenu soit complètement rendu
-  await new Promise(resolve => setTimeout(resolve, 800));
+  await new Promise(resolve => setTimeout(resolve, 1000));
   
   return container;
 }
