@@ -20,8 +20,9 @@ const CONFIG = {
     detailViewSelector: '[role="main"] [data-message-id]',
     // Sélecteurs DANS le conteneur - multiples options
     subjectSelectors: [
-      'h2',                    // Standard Gmail
-      '.hP',                   // Alternative
+      '.hP',                   // ✅ Principal (h2.hP)
+      'h2.hP',                 // ✅ Plus spécifique
+      'h2',                    // Alternative
       '[data-subject]',        // Avec attribut
       'span[data-is-subject="true"]',  // Attribut spécifique
       '.aHl h2'               // Dans le conteneur aHl
