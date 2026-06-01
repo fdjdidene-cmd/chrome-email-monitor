@@ -7,7 +7,6 @@ let isDetailViewOpen = false;
 chrome.storage.local.get('processedEmails', (result) => {
   if (result.processedEmails) {
     processedEmails = new Set(result.processedEmails);
-    console.log('✅ Emails traités chargés:', processedEmails.size, 'email(s)');
   }
 });
 
@@ -103,7 +102,7 @@ function findElementWithMultipleSelectors(container, selectors) {
     try {
       const element = container.querySelector(selector);
       if (element && element.innerText?.trim()) {
-        console.log('✅ Trouvé avec sélecteur:', selector);
+        logDetail('✅ Trouvé avec sélecteur:', selector);
         return element;
       }
     } catch (e) {
@@ -114,6 +113,15 @@ function findElementWithMultipleSelectors(container, selectors) {
 }
 
 /**
+ * Logging uniquement en vue détail
+ */
+function logDetail(...args) {
+  if (isDetailViewOpen) {
+    console.log(...args);
+  }
+}
+
+/**
  * Vérifie si on est dans la vue détail d'un email
  */
 function isEmailDetailViewOpen(service) {
@@ -121,11 +129,9 @@ function isEmailDetailViewOpen(service) {
   const detailElement = document.querySelector(config.detailViewSelector);
   
   if (!detailElement) {
-    console.log('📋 Vue liste des emails - pas de traitement');
     return false;
   }
   
-  console.log('📧 Vue détail d\'un email détectée');
   return true;
 }
 
@@ -137,7 +143,7 @@ function getEmailContainer(service) {
   const container = document.querySelector(config.emailContainerSelector);
   
   if (!container) {
-    console.warn('⚠️ Conteneur email non trouvé:', config.emailContainerSelector);
+    logDetail('⚠️ Conteneur email non trouvé:', config.emailContainerSelector);
     return null;
   }
   
@@ -174,7 +180,7 @@ function formatTimestamp(isoString) {
  */
 async function analyzeEmailForPhishing(emailData) {
   try {
-    console.log('🔐 Analyse phishing lancée via LM Studio...');
+    logDetail('🔐 Analyse phishing lancée via LM Studio...');
     
     // Préparer les données pour l'IA
     const emailSummary = `
@@ -214,20 +220,20 @@ Content Preview: ${emailData.content.substring(0, 300)}...
     });
 
     if (!response.ok) {
-      console.warn('⚠️ LM Studio non disponible:', response.status);
+      logDetail('⚠️ LM Studio non disponible:', response.status);
       return null;
     }
 
     const data = await response.json();
     const analysis = data.choices[0].message.content;
 
-    console.log('✅ Analyse IA reçue');
-    console.log(analysis);
+    logDetail('✅ Analyse IA reçue');
+    logDetail(analysis);
 
     return analysis;
 
   } catch (error) {
-    console.warn('⚠️ Erreur lors de l\'analyse IA:', error.message);
+    logDetail('⚠️ Erreur lors de l\'analyse IA:', error.message);
     return null;
   }
 }
@@ -434,23 +440,23 @@ function extractGmailEmail() {
     const container = getEmailContainer('GMAIL');
     if (!container) return null;
 
-    console.log('🔎 Extraction depuis le conteneur Gmail');
-    console.log('📦 Conteneur:', container);
+    logDetail('🔎 Extraction depuis le conteneur Gmail');
+    logDetail('📦 Conteneur:', container);
     
     // Sujet - essayer plusieurs sélecteurs
     const subjectElement = findElementWithMultipleSelectors(container, config.subjectSelectors);
     const subject = subjectElement?.innerText?.trim() || 'Sujet inconnu';
-    console.log('📌 Sujet trouvé:', subject);
+    logDetail('📌 Sujet trouvé:', subject);
 
     // Expéditeur - essayer plusieurs sélecteurs
     const senderElement = findElementWithMultipleSelectors(container, config.senderSelectors);
     const sender = senderElement?.innerText?.trim() || 'Expéditeur inconnu';
-    console.log('👤 Expéditeur trouvé:', sender);
+    logDetail('👤 Expéditeur trouvé:', sender);
 
     // Contenu du mail - essayer plusieurs sélecteurs
     const contentElement = findElementWithMultipleSelectors(container, config.contentSelectors);
     const content = contentElement?.innerText?.trim() || 'Contenu non disponible';
-    console.log('📝 Contenu trouvé (longueur):', content.length);
+    logDetail('📝 Contenu trouvé (longueur):', content.length);
 
     // Pièces jointes - essayer plusieurs sélecteurs
     let attachmentElements = [];
@@ -458,7 +464,7 @@ function extractGmailEmail() {
       try {
         attachmentElements = Array.from(container.querySelectorAll(selector));
         if (attachmentElements.length > 0) {
-          console.log('✅ Pièces jointes trouvées avec:', selector);
+          logDetail('✅ Pièces jointes trouvées avec:', selector);
           break;
         }
       } catch (e) {
@@ -471,11 +477,11 @@ function extractGmailEmail() {
       size: el.closest('.aZo')?.querySelector('.tS')?.innerText?.trim() || 'Taille inconnue'
     }));
 
-    console.log('📎 Nombre de pièces jointes:', attachments.length);
+    logDetail('📎 Nombre de pièces jointes:', attachments.length);
 
     // Créer le timestamp AU MOMENT DE L'EXTRACTION
     const timestamp = getTimestamp();
-    console.log('⏰ Timestamp créé:', timestamp);
+    logDetail('⏰ Timestamp créé:', timestamp);
 
     return {
       service: 'Gmail',
@@ -487,7 +493,7 @@ function extractGmailEmail() {
       timestamp: timestamp
     };
   } catch (error) {
-    console.error('❌ Erreur extraction Gmail:', error);
+    logDetail('❌ Erreur extraction Gmail:', error);
     return null;
   }
 }
@@ -503,7 +509,7 @@ function extractOutlookEmail() {
     const container = getEmailContainer('OUTLOOK');
     if (!container) return null;
 
-    console.log('🔎 Extraction depuis le conteneur Outlook');
+    logDetail('🔎 Extraction depuis le conteneur Outlook');
     
     // Sujet
     const subjectElement = findElementWithMultipleSelectors(container, config.subjectSelectors);
@@ -546,7 +552,7 @@ function extractOutlookEmail() {
       timestamp: timestamp
     };
   } catch (error) {
-    console.error('❌ Erreur extraction Outlook:', error);
+    logDetail('❌ Erreur extraction Outlook:', error);
     return null;
   }
 }
@@ -563,13 +569,13 @@ async function waitForEmailToLoad(service, retries = 0) {
   const container = getEmailContainer(service);
   
   if (!container && retries < config.maxRetries) {
-    console.log(`⏳ Email pas encore chargé (${service})... tentative ${retries + 1}/${config.maxRetries}`);
+    logDetail(`⏳ Email pas encore chargé (${service})... tentative ${retries + 1}/${config.maxRetries}`);
     await new Promise(resolve => setTimeout(resolve, config.retryDelay));
     return waitForEmailToLoad(service, retries + 1);
   }
 
   if (!container) {
-    console.warn('⚠️ Impossible de charger le mail après plusieurs tentatives');
+    logDetail('⚠️ Impossible de charger le mail après plusieurs tentatives');
     return null;
   }
 
@@ -583,7 +589,7 @@ async function waitForEmailToLoad(service, retries = 0) {
   }
 
   if (!subjectFound && retries < config.maxRetries) {
-    console.log(`⏳ Sujet pas encore disponible (${service})... tentative ${retries + 1}/${config.maxRetries}`);
+    logDetail(`⏳ Sujet pas encore disponible (${service})... tentative ${retries + 1}/${config.maxRetries}`);
     await new Promise(resolve => setTimeout(resolve, config.retryDelay));
     return waitForEmailToLoad(service, retries + 1);
   }
@@ -600,11 +606,16 @@ async function waitForEmailToLoad(service, retries = 0) {
 async function processEmail(service) {
   try {
     // ✅ VÉRIFICATION CLÉE: On n'extrait QUE si on est en vue détail
-    if (!isEmailDetailViewOpen(service)) {
+    const isDetail = isEmailDetailViewOpen(service);
+    if (!isDetail) {
+      isDetailViewOpen = false;
       return;
     }
 
-    console.log('🔍 Nouveau mail détecté (' + service + ')...');
+    // On est en vue détail
+    isDetailViewOpen = true;
+    console.clear(); // Vider la console
+    logDetail('🔍 Nouveau mail détecté (' + service + ')...');
     
     // Attendre le chargement complet
     const emailElement = await waitForEmailToLoad(service);
@@ -625,7 +636,7 @@ async function processEmail(service) {
 
     // Vérifier si c'est un nouvel email
     if (currentEmailId === emailHash) {
-      console.log('⏭️  Même email déjà traité, pas de re-extraction:', emailData.subject);
+      logDetail('⏭️  Même email déjà traité, pas de re-extraction:', emailData.subject);
       return;
     }
 
@@ -641,10 +652,10 @@ async function processEmail(service) {
     });
 
     // Afficher le résultat EN CONSOLE
-    console.log('✅ EMAIL EXTRAIT AVEC SUCCÈS');
-    console.log('═'.repeat(60));
-    console.log(JSON.stringify(emailData, null, 2));
-    console.log('═'.repeat(60));
+    logDetail('✅ EMAIL EXTRAIT AVEC SUCCÈS');
+    logDetail('═'.repeat(60));
+    logDetail(JSON.stringify(emailData, null, 2));
+    logDetail('═'.repeat(60));
 
     // Afficher le résultat DANS LA PAGE (sans analyse pour le moment)
     displayEmailInfoInPage(emailData);
@@ -658,19 +669,19 @@ async function processEmail(service) {
     });
 
     // Lancer l'analyse IA en arrière-plan (async)
-    console.log('🔐 Lancement de l\'analyse IA...');
+    logDetail('🔐 Lancement de l\'analyse IA...');
     analyzeEmailForPhishing(emailData).then(analysis => {
       if (analysis) {
-        console.log('✅ Analyse IA complétée');
-        console.log(analysis);
+        logDetail('✅ Analyse IA complétée');
+        logDetail(analysis);
         updateEmailBoxWithAnalysis(analysis);
       } else {
-        console.warn('⚠️ Analyse IA non disponible');
+        logDetail('⚠️ Analyse IA non disponible');
       }
     });
 
   } catch (error) {
-    console.error('❌ Erreur lors du traitement du mail:', error);
+    logDetail('❌ Erreur lors du traitement du mail:', error);
   }
 }
 
@@ -682,11 +693,9 @@ function initializeEmailMonitor() {
   const emailService = detectEmailService();
   
   if (!emailService) {
-    console.warn('⚠️ Service email non détecté');
+    logDetail('⚠️ Service email non détecté');
     return;
   }
-
-  console.log('🚀 Email Monitor initialisé pour:', emailService);
 
   // Utiliser un intervalle au lieu de MutationObserver pour éviter le warning
   let lastCheckedTime = 0;
@@ -710,7 +719,9 @@ function initializeEmailMonitor() {
     
     // Si on vient de passer en vue détail, traiter l'email
     if (isDetailNow && !lastDetailViewState) {
-      console.log('👁️  Entrée en vue détail - activation du traitement');
+      isDetailViewOpen = true;
+      console.clear();
+      logDetail('👁️  Entrée en vue détail - activation du traitement');
       processEmail(emailService);
     }
     
@@ -721,14 +732,13 @@ function initializeEmailMonitor() {
     
     // Si on sort de la vue détail, réinitialiser
     if (!isDetailNow && lastDetailViewState) {
-      console.log('👈 Retour à la liste - pause du traitement');
+      isDetailViewOpen = false;
+      logDetail('👈 Retour à la liste - pause du traitement');
       currentEmailId = null;
     }
     
     lastDetailViewState = isDetailNow;
   }, 300);
-
-  console.log('👁️  Surveillance activée - UNIQUEMENT sur vue détail');
 }
 
 // Initialiser quand le DOM est prêt
