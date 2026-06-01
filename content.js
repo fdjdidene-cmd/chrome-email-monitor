@@ -75,6 +75,13 @@ const CONFIG = {
   }
 };
 
+// Configuration LM Studio
+const LM_STUDIO_CONFIG = {
+  URL: 'http://127.0.0.1:1234/v1/chat/completions',
+  MODEL: 'meta-llama-3-8b-instruct',
+  TIMEOUT: 30000 // 30 secondes
+};
+
 /**
  * Détecte le service email utilisé
  */
@@ -162,9 +169,94 @@ function formatTimestamp(isoString) {
 }
 
 /**
+ * Analyse l'email pour détecter le phishing via LM Studio
+ */
+async function analyzeEmailForPhishing(emailData) {
+  try {
+    console.log('🔐 Analyse phishing lancée via LM Studio...');
+    
+    // Préparer les données pour l'IA
+    const emailSummary = `
+Subject: ${emailData.subject}
+Sender: ${emailData.sender}
+Service: ${emailData.service}
+Attachments: ${emailData.attachmentCount > 0 ? emailData.attachments.map(a => a.name).join(', ') : 'Aucun'}
+Content Preview: ${emailData.content.substring(0, 300)}...
+    `.trim();
+
+    // Construire le prompt pour l'IA
+    const systemPrompt = "Tu es expert cybersécurité. Voici les données provenant d'un mail. Base-toi sur ces données pour me fournir une analyse rapide de la fiabilité du mail. Tu dois détecter une tentative de phishing potentielle. Termine ta réponse par un niveau d'alerte compris entre 0 et 10.";
+    
+    const userPrompt = `Analyse ce mail pour détecter du phishing:\n\n${emailSummary}`;
+
+    // Envoyer la requête à LM Studio
+    const response = await fetch(LM_STUDIO_CONFIG.URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: LM_STUDIO_CONFIG.MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 500
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('⚠️ LM Studio non disponible:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const analysis = data.choices[0].message.content;
+
+    console.log('✅ Analyse IA reçue');
+    console.log(analysis);
+
+    return analysis;
+
+  } catch (error) {
+    console.warn('⚠️ Erreur lors de l\'analyse IA:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Extrait le niveau d'alerte de la réponse IA
+ */
+function extractAlertLevel(analysis) {
+  try {
+    // Chercher un nombre entre 0 et 10
+    const match = analysis.match(/(\d+)\s*\/\s*10|niveau.*?(\d+)|alerte.*?(\d+)/gi);
+    if (match) {
+      const numbers = analysis.match(/\d+/g);
+      for (const num of numbers) {
+        const n = parseInt(num);
+        if (n >= 0 && n <= 10) {
+          return n;
+        }
+      }
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Affiche les informations dans une boîte en bas de la page
  */
-function displayEmailInfoInPage(emailData) {
+function displayEmailInfoInPage(emailData, phishingAnalysis = null) {
   // Supprimer la boîte précédente s'il y en a une
   const oldBox = document.getElementById('email-monitor-box');
   if (oldBox) {
@@ -178,8 +270,8 @@ function displayEmailInfoInPage(emailData) {
     position: fixed;
     bottom: 0;
     right: 0;
-    width: 400px;
-    max-height: 50vh;
+    width: 450px;
+    max-height: 70vh;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     padding: 20px;
@@ -199,6 +291,34 @@ function displayEmailInfoInPage(emailData) {
         </div>
       `).join('')
     : '<div style="opacity: 0.8; font-size: 12px;">Aucune pièce jointe</div>';
+
+  // Contenu de l'analyse IA
+  let analysisHTML = '';
+  if (phishingAnalysis) {
+    const alertLevel = extractAlertLevel(phishingAnalysis);
+    const alertColor = alertLevel >= 7 ? '#ff6b6b' : alertLevel >= 4 ? '#ffd93d' : '#51cf66';
+    
+    analysisHTML = `
+      <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid ${alertColor};">
+        <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">🤖 ANALYSE IA - DÉTECTION PHISHING</span>
+        <div style="font-size: 12px; max-height: 150px; overflow-y: auto; word-break: break-word; line-height: 1.4; margin-bottom: 10px;">
+          ${escapeHtml(phishingAnalysis)}
+        </div>
+        ${alertLevel !== null ? `
+          <div style="background: ${alertColor}; padding: 8px; border-radius: 4px; text-align: center; font-weight: 600;">
+            ⚠️ Niveau d'alerte: ${alertLevel}/10
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } else {
+    analysisHTML = `
+      <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+        <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">🤖 ANALYSE IA - DÉTECTION PHISHING</span>
+        <div style="font-size: 12px; opacity: 0.9;">⏳ Analyse en cours...</div>
+      </div>
+    `;
+  }
 
   box.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -242,15 +362,17 @@ function displayEmailInfoInPage(emailData) {
 
     <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
       <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">CONTENU</span>
-      <div style="font-size: 13px; max-height: 120px; overflow-y: auto; word-break: break-word; line-height: 1.4;">
-        ${escapeHtml(emailData.content.substring(0, 500))}${emailData.content.length > 500 ? '...' : ''}
+      <div style="font-size: 13px; max-height: 100px; overflow-y: auto; word-break: break-word; line-height: 1.4;">
+        ${escapeHtml(emailData.content.substring(0, 300))}${emailData.content.length > 300 ? '...' : ''}
       </div>
     </div>
 
-    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px;">
+    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
       <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">PIÈCES JOINTES (${emailData.attachmentCount})</span>
       ${attachmentsHTML}
     </div>
+
+    ${analysisHTML}
   `;
 
   // Ajouter la boîte au DOM
@@ -260,6 +382,35 @@ function displayEmailInfoInPage(emailData) {
   document.getElementById('close-email-box').addEventListener('click', () => {
     box.remove();
   });
+}
+
+/**
+ * Met à jour la boîte avec l'analyse IA
+ */
+function updateEmailBoxWithAnalysis(phishingAnalysis) {
+  const box = document.getElementById('email-monitor-box');
+  if (!box) return;
+
+  // Trouver et remplacer la section analyse
+  const analysisSection = box.querySelector('[style*="ANALYSE IA"]')?.parentElement;
+  if (!analysisSection) return;
+
+  const alertLevel = extractAlertLevel(phishingAnalysis);
+  const alertColor = alertLevel >= 7 ? '#ff6b6b' : alertLevel >= 4 ? '#ffd93d' : '#51cf66';
+
+  analysisSection.innerHTML = `
+    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid ${alertColor};">
+      <span style="opacity: 0.8; font-size: 12px; display: block; margin-bottom: 8px;">🤖 ANALYSE IA - DÉTECTION PHISHING</span>
+      <div style="font-size: 12px; max-height: 150px; overflow-y: auto; word-break: break-word; line-height: 1.4; margin-bottom: 10px;">
+        ${escapeHtml(phishingAnalysis)}
+      </div>
+      ${alertLevel !== null ? `
+        <div style="background: ${alertColor}; padding: 8px; border-radius: 4px; text-align: center; font-weight: 600;">
+          ⚠️ Niveau d'alerte: ${alertLevel}/10
+        </div>
+      ` : ''}
+    </div>
+  `;
 }
 
 /**
@@ -494,7 +645,7 @@ async function processEmail(service) {
     console.log(JSON.stringify(emailData, null, 2));
     console.log('═'.repeat(60));
 
-    // Afficher le résultat DANS LA PAGE
+    // Afficher le résultat DANS LA PAGE (sans analyse pour le moment)
     displayEmailInfoInPage(emailData);
 
     // Envoyer au background script
@@ -503,6 +654,18 @@ async function processEmail(service) {
       data: emailData
     }).catch(() => {
       // Le background script n'est pas disponible, c'est OK
+    });
+
+    // Lancer l'analyse IA en arrière-plan (async)
+    console.log('🔐 Lancement de l\'analyse IA...');
+    analyzeEmailForPhishing(emailData).then(analysis => {
+      if (analysis) {
+        console.log('✅ Analyse IA complétée');
+        console.log(analysis);
+        updateEmailBoxWithAnalysis(analysis);
+      } else {
+        console.warn('⚠️ Analyse IA non disponible');
+      }
     });
 
   } catch (error) {
