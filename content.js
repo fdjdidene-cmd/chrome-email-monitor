@@ -13,8 +13,8 @@ chrome.storage.local.get('processedEmails', (result) => {
 // Configuration des délais d'attente pour différents services
 const CONFIG = {
   GMAIL: {
-    // Conteneur principal de l'email
-    emailContainerSelector: 'div.nH > div.l2',
+    // Conteneur principal de l'email - CORRIGÉ
+    emailContainerSelector: 'div.ha',
     // Détecte si on est dans la vue détail
     detailViewSelector: '[role="main"] [data-message-id]',
     // Sélecteurs DANS le conteneur - multiples options
