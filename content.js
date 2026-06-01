@@ -27,23 +27,25 @@ const CONFIG = {
       '.aHl h2'               // Dans le conteneur aHl
     ],
     senderSelectors: [
-      '.gD.gE span',           // Standard
-      '.go span',              // Alternative
-      '[data-email]',          // Avec email
-      '.yP',                   // Alternative
-      '.gD span'               // Simpler
+      '.gD span',              // ✅ Principal
+      'span.gD span',          // ✅ Plus spécifique
+      '.gD',                   // Alternative
+      'span[email]',           // Avec attribut email
+      'h3.iw .gD span'         // Avec contexte
     ],
     contentSelectors: [
-      '.aHl .a3s',             // Standard Gmail
-      '.h5',                   // Alternative
-      '[role="article"]',      // Article
-      '.msg',                  // Message
-      '.aHl'                   // Conteneur du message
+      '.a3s.aiL',              // ✅ Principal
+      '.a3s',                  // ✅ Alternative
+      'div.a3s',               // Spécifique
+      '.ii.gt .a3s',           // Avec contexte
+      '[id=":1y"]'             // Avec ID
     ],
     attachmentSelectors: [
-      '.aZo',                  // Standard
-      '[data-attachment-id]',  // Avec ID
-      '.aVn'                   // Alternative
+      '.aXK',                  // ✅ Principal (conteneur pièce jointe)
+      '.aXK.N5jrZb',           // ✅ Plus spécifique
+      'div.aXK',               // Alternative
+      '.aXK span.aXL',         // Avec le nom
+      '[download_url]'         // Avec attribut
     ],
     maxRetries: 15,
     retryDelay: 300
@@ -472,10 +474,19 @@ function extractGmailEmail() {
       }
     }
 
-    const attachments = attachmentElements.map(el => ({
-      name: el.getAttribute('download') || el.innerText.trim(),
-      size: el.closest('.aZo')?.querySelector('.tS')?.innerText?.trim() || 'Taille inconnue'
-    }));
+    const attachments = attachmentElements.map(el => {
+      // Récupérer le nom de la pièce jointe
+      const nameElement = el.querySelector('.aXL');
+      const name = nameElement?.innerText?.trim() || el.getAttribute('download') || 'Fichier inconnu';
+      
+      // Récupérer la taille (si disponible)
+      const size = 'Taille inconnue';
+      
+      return {
+        name: name,
+        size: size
+      };
+    });
 
     logDetail('📎 Nombre de pièces jointes:', attachments.length);
 
