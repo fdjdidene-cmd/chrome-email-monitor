@@ -27,11 +27,11 @@ const CONFIG = {
       '.aHl h2'               // Dans le conteneur aHl
     ],
     senderSelectors: [
-      '.gD span',              // ✅ Principal
-      'span.gD span',          // ✅ Plus spécifique
-      '.gD',                   // Alternative
+      '.gD',                   // ✅ Principal - prend le texte directement
+      'span.gD',               // ✅ Plus spécifique
+      '.gD span',              // Alternative - si texte dans un span enfant
       'span[email]',           // Avec attribut email
-      'h3.iw .gD span'         // Avec contexte
+      'h3.iw .gD'              // Avec contexte
     ],
     contentSelectors: [
       '.a3s.aiL',              // ✅ Principal
